@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
-// import "@openzeppelin/contracts/proxy/Clones.sol";
+
 import "@openzeppelin/contracts-upgradeable/proxy/ClonesUpgradeable.sol";
 import "./Buffer.sol";
 
@@ -21,8 +21,8 @@ contract Factory {
         address _curator,
         address[] memory _partnersGroup,
         address[] memory _creatorsGroup,
-        address _NFTAddress,
-        uint256[] memory _shares
+        uint256[] memory _shares,
+        uint256[] memory _partnerShare
     ) external returns (address) {
         address payable clone = payable(
             ClonesUpgradeable.clone(implementation)
@@ -32,8 +32,8 @@ contract Factory {
             _curator,
             _partnersGroup,
             _creatorsGroup,
-            _NFTAddress,
-            _shares
+            _shares,
+            _partnerShare
         );
         emit ContractDeployed(msg.sender, clone, title);
         return clone;

@@ -17,7 +17,7 @@ task("deploy", "deploys the contract", async (args, hre) => {
   console.log("factory address", factory.address);
   await fs.promises
     .mkdir(path.resolve(__dirname, "./deployments"), { recursive: true })
-    .catch((e) => {});
+    .catch((e) => { });
   await fs.promises.writeFile(
     path.resolve(__dirname, `./deployments/${hre.network.name}.json`),
     JSON.stringify({ address: factory.address })
@@ -88,6 +88,12 @@ module.exports = {
       timeout: 1000 * 60 * 60 * 24, // 1 day
       accounts: [process.env.RINKEBY_PRIVATE_KEY],
     },
+    mainnet: {
+      gasPrice: 77000000000,
+      timeout: 1000 * 60 * 60 * 24, // 1 day
+      url: process.env.MAINNET,
+      accounts: [process.env.MAINNET_PRIVATE_KEY],
+    }
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
