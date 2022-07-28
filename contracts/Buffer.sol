@@ -79,8 +79,14 @@ contract Buffer is Initializable {
     }
 
     receive() external payable {
+        // totalReceived += msg.value;
+        // msg.value += msg.value;
+    }
+
+    function shareReceived() external payable {
         totalReceived += msg.value;
-        totalOwnersFee += (msg.value * share[5]) / totalShares;
+
+        totalOwnersFee = (msg.value * share[5]) / totalShares;
         // Marketplace Calculation
         _shareData[marketWallet].shareAmount +=
             (msg.value * share[6]) /
