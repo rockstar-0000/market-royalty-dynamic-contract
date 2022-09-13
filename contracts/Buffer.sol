@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity 0.8.16;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract Buffer is Initializable {
+contract Buffer is Initializable, ReentrancyGuard {
     uint256 public totalReceived;
     struct ShareData {
         uint256 shareAmount;
@@ -18,6 +19,7 @@ contract Buffer is Initializable {
     uint256 public totalShares = 0;
     uint256 private totalOwnersFee;
     uint256 private totalShareOfPartners = 0;
+    uint256 private royaltyFee = 10;
 
     mapping(uint256 => address) public partnersGroup;
     uint256 private partnersGroupLength = 0;
@@ -29,39 +31,79 @@ contract Buffer is Initializable {
 
     address public marketWallet; // wallet address for market fee
 
+    event updateCreatorPairsInfo();
+
     function initialize(
         address _curator, // address for curator
-        address[] memory _partnersGroup, // array of address for partners group
+        address[] calldata _partnersGroup, // array of address for partners group
         address[] memory _creatorsGroup, // array of address for creators group
-        uint256[] memory _shares, // array of share percentage for every group
-        uint256[] memory _partnerShare // array of share percentage for every members of partners group
+        uint256[] calldata _shares, // array of share percentage for every group
+        uint256[] calldata _partnerShare, // array of share percentage for every members of partners group
+        address _marketWallet
     ) public initializer {
+        curator = _curator;
+        require(
+            _partnersGroup.length > 0,
+            "Please input partners group information correctly."
+        );
+        for (uint256 i = 0; i < _partnersGroup.length; i++) {
+            for (uint256 j = 0; j < i; j++) {
+                require(
+                    partnersGroup[j] != _partnersGroup[i],
+                    "Partner address is repeated, please check again."
+                );
+            }
+            partnersGroup[i] = _partnersGroup[i];
+            partnersGroupLength++;
+        }
+        require(
+            _creatorsGroup.length > 0,
+            "Please input creators group information correctly."
+        );
+        for (uint256 i = 0; i < _creatorsGroup.length; i++) {
+            for (uint256 j = 0; j < i; j++) {
+                require(
+                    creatorsGroup[j] != _creatorsGroup[i],
+                    "Creator address is repeated, please check again."
+                );
+            }
+            creatorsGroup[i] = _creatorsGroup[i];
+            creatorsGroupLength++;
+        }
+        require(_shares.length == 7, "Please input shares info correctly.");
         for (uint256 i = 0; i < _shares.length; i++) {
+            require(
+                _shares[i] > 0,
+                "Total share value must be greater than 0."
+            );
             totalShares += _shares[i];
             share[i] = _shares[i];
             shareLength++;
         }
-        curator = _curator;
-        for (uint256 i = 0; i < _partnersGroup.length; i++) {
-            partnersGroup[i] = _partnersGroup[i];
-            partnersGroupLength++;
-        }
-        for (uint256 i = 0; i < _creatorsGroup.length; i++) {
-            creatorsGroup[i] = _creatorsGroup[i];
-            creatorsGroupLength++;
-        }
+        require(
+            _partnersGroup.length == _partnerShare.length,
+            "Please input partner group shares information correctly."
+        );
         for (uint256 i = 0; i < _partnerShare.length; i++) {
+            require(
+                _partnerShare[i] > 0,
+                "Partners' share value must be greater than 0."
+            );
             totalShareOfPartners += _partnerShare[i];
             partnerShare[i] = _partnerShare[i];
         }
-        marketWallet = 0x13f41aa17Bf27d9d18910683b8fF61Eb8c992855;
+        marketWallet = _marketWallet;
     }
 
     // update creator pair info of creators addresses and tokenIDs of same lengths
     function updateCreatorPairInfo(
-        address[] memory creators,
-        uint256[] memory tokenIDs
+        address[] calldata creators,
+        uint256[] calldata tokenIDs
     ) external {
+        require(
+            creators.length == tokenIDs.length,
+            "Please input the creators info and tokenIDs as same length."
+        );
         for (uint256 i = 0; i < creators.length; i++) {
             uint256 checkValidInfo = 0;
             for (uint256 j = 0; j < creatorsGroupLength; j++) {
@@ -78,15 +120,10 @@ contract Buffer is Initializable {
         }
     }
 
-    receive() external payable {
-        // totalReceived += msg.value;
-        // msg.value += msg.value;
-    }
-
     function shareReceived() external payable {
         totalReceived += msg.value;
 
-        totalOwnersFee = (msg.value * share[5]) / totalShares;
+        totalOwnersFee += (msg.value * share[5]) / totalShares;
         // Marketplace Calculation
         _shareData[marketWallet].shareAmount +=
             (msg.value * share[6]) /
@@ -113,24 +150,32 @@ contract Buffer is Initializable {
         return _shareData[account].lastBlockNumber;
     }
 
+    function updateFeePercent(uint256 _royaltyFee) public {
+        require(
+            _royaltyFee < 20,
+            "Your royalty percentage is set as over 20%."
+        );
+        royaltyFee = _royaltyFee;
+    }
+
     // Withdraw
     function withdraw(
         address account, // address to ask withdraw
-        address[] memory sellerAddresses, // array of sellers address
-        uint256[] memory tokenIDs, // array of tokenIDs to be sold
-        uint256[] memory prices, // array of prices of NFTs to be sold
-        uint256 blocknumber, // current block number of transaction
-        address[] memory owners // array of current NFT owners
-    ) external payable {
-        _shareData[account].lastBlockNumber = blocknumber;
+        address[] calldata sellerAddresses, // array of sellers address
+        uint256[] calldata tokenIDs, // array of tokenIDs to be sold
+        uint256[] calldata prices, // array of prices of NFTs to be sold
+        // uint256 blocknumber, // current block number of transaction
+        address[] calldata owners // array of current NFT owners
+    ) external {
+        _shareData[account].lastBlockNumber = block.number;
         uint256 leng = tokenIDs.length;
         for (uint256 i = 0; i < leng; i++) {
             _shareData[_creatorPairInfo[tokenIDs[i]]].shareAmount +=
-                (share[3] * prices[i] * 10) /
+                (share[3] * prices[i] * royaltyFee) /
                 100 /
                 totalShares;
             _shareData[sellerAddresses[i]].shareAmount +=
-                (share[4] * prices[i] * 10) /
+                (share[4] * prices[i] * royaltyFee) /
                 100 /
                 totalShares;
         }
@@ -140,10 +185,6 @@ contract Buffer is Initializable {
             _shareData[owners[i]].shareAmount += totalOwnersFee / ownerLength;
         }
         totalOwnersFee = 0;
-        require(
-            _shareData[account].shareAmount > 0,
-            "Claim is not allowed as of now due to the 0 balance. Please check it later"
-        );
         if (_shareData[account].shareAmount > 0) {
             _shareData[account].withdrawn += _shareData[account].shareAmount;
             _transfer(account, _shareData[account].shareAmount);

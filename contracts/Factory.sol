@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity 0.8.16;
 
 import "@openzeppelin/contracts-upgradeable/proxy/ClonesUpgradeable.sol";
 import "./Buffer.sol";
@@ -19,10 +19,11 @@ contract Factory {
     function genesis(
         string memory title,
         address _curator,
-        address[] memory _partnersGroup,
+        address[] calldata _partnersGroup,
         address[] memory _creatorsGroup,
-        uint256[] memory _shares,
-        uint256[] memory _partnerShare
+        uint256[] calldata _shares,
+        uint256[] calldata _partnerShare,
+        address _marketWallet
     ) external returns (address) {
         address payable clone = payable(
             ClonesUpgradeable.clone(implementation)
@@ -33,7 +34,8 @@ contract Factory {
             _partnersGroup,
             _creatorsGroup,
             _shares,
-            _partnerShare
+            _partnerShare,
+            _marketWallet
         );
         emit ContractDeployed(msg.sender, clone, title);
         return clone;
