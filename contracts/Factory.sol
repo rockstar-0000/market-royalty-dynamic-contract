@@ -18,8 +18,9 @@ contract Factory {
 
     function genesis(
         string memory title,
+        address _owner,
         address _curator,
-        address[] calldata _partnersGroup,
+        address[] memory _partnersGroup,
         address[] memory _creatorsGroup,
         uint256[] calldata _shares,
         uint256[] calldata _partnerShare,
@@ -30,6 +31,7 @@ contract Factory {
         );
         Buffer buffer = Buffer(clone);
         buffer.initialize(
+            _owner,
             _curator,
             _partnersGroup,
             _creatorsGroup,

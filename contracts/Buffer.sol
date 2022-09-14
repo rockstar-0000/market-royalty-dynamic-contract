@@ -13,17 +13,17 @@ contract Buffer is Initializable, ReentrancyGuard {
     }
 
     mapping(address => ShareData) public _shareData;
-    mapping(uint256 => address) public _creatorPairInfo;
+    mapping(uint256 => address) private _creatorPairInfo;
 
     address public curator;
     uint256 public totalShares = 0;
     uint256 private totalOwnersFee;
     uint256 private totalShareOfPartners = 0;
-    uint256 private royaltyFee = 10;
+    uint256 public royaltyFee = 10;
 
-    mapping(uint256 => address) public partnersGroup;
+    mapping(uint256 => address) private partnersGroup;
     uint256 private partnersGroupLength = 0;
-    mapping(uint256 => address) public creatorsGroup;
+    mapping(uint256 => address) private creatorsGroup;
     uint256 private creatorsGroupLength = 0;
     mapping(uint256 => uint256) public share;
     uint256 private shareLength = 0;
@@ -31,16 +31,26 @@ contract Buffer is Initializable, ReentrancyGuard {
 
     address public marketWallet; // wallet address for market fee
 
-    event updateCreatorPairsInfo();
+    address public owner;
+    modifier onlyOwner() {
+        require(owner == msg.sender, "Caller is not the owner.");
+        _;
+    }
+
+    event UpdateCreatorPairsCheck(bool updated);
+    event UpdateCreatorsGroupCheck(bool updateGroup);
+    event UpdateFeeCheck(uint256 feePercent);
+    event WithdrawnCheck(address to, uint256 amount);
 
     function initialize(
+        address _owner,
         address _curator, // address for curator
-        address[] calldata _partnersGroup, // array of address for partners group
+        address[] memory _partnersGroup, // array of address for partners group
         address[] memory _creatorsGroup, // array of address for creators group
         uint256[] calldata _shares, // array of share percentage for every group
         uint256[] calldata _partnerShare, // array of share percentage for every members of partners group
         address _marketWallet
-    ) public initializer {
+    ) public payable initializer {
         curator = _curator;
         require(
             _partnersGroup.length > 0,
@@ -93,13 +103,18 @@ contract Buffer is Initializable, ReentrancyGuard {
             partnerShare[i] = _partnerShare[i];
         }
         marketWallet = _marketWallet;
+        owner = _owner;
+    }
+
+    function transferOwnership(address _newOwner) external onlyOwner {
+        owner = _newOwner;
     }
 
     // update creator pair info of creators addresses and tokenIDs of same lengths
     function updateCreatorPairInfo(
         address[] calldata creators,
         uint256[] calldata tokenIDs
-    ) external {
+    ) external onlyOwner {
         require(
             creators.length == tokenIDs.length,
             "Please input the creators info and tokenIDs as same length."
@@ -118,6 +133,28 @@ contract Buffer is Initializable, ReentrancyGuard {
             );
             _creatorPairInfo[tokenIDs[i]] = creators[i];
         }
+        emit UpdateCreatorPairsCheck(true);
+    }
+
+    function updateCreatorsGroup(address[] calldata _creatorsGroup)
+        external
+        onlyOwner
+    {
+        require(
+            _creatorsGroup.length > 0,
+            "Please input creators group information correctly."
+        );
+        for (uint256 i = 0; i < _creatorsGroup.length; i++) {
+            for (uint256 j = 0; j < i; j++) {
+                require(
+                    creatorsGroup[j] != _creatorsGroup[i],
+                    "Creator address is repeated, please check again."
+                );
+            }
+            creatorsGroup[i] = _creatorsGroup[i];
+            creatorsGroupLength++;
+        }
+        emit UpdateCreatorsGroupCheck(true);
     }
 
     function shareReceived() external payable {
@@ -150,12 +187,13 @@ contract Buffer is Initializable, ReentrancyGuard {
         return _shareData[account].lastBlockNumber;
     }
 
-    function updateFeePercent(uint256 _royaltyFee) public {
+    function updateFeePercent(uint256 _royaltyFee) public onlyOwner {
         require(
             _royaltyFee < 20,
             "Your royalty percentage is set as over 20%."
         );
         royaltyFee = _royaltyFee;
+        emit UpdateFeeCheck(royaltyFee);
     }
 
     // Withdraw
@@ -164,9 +202,22 @@ contract Buffer is Initializable, ReentrancyGuard {
         address[] calldata sellerAddresses, // array of sellers address
         uint256[] calldata tokenIDs, // array of tokenIDs to be sold
         uint256[] calldata prices, // array of prices of NFTs to be sold
-        // uint256 blocknumber, // current block number of transaction
-        address[] calldata owners // array of current NFT owners
-    ) external {
+        address[] memory creators,
+        address[] memory owners // array of current NFT owners
+    ) external nonReentrant {
+        for (uint256 i = 0; i < creators.length; i++) {
+            uint256 checkValidInfo = 0;
+            for (uint256 j = 0; j < creatorsGroupLength; j++) {
+                if (creators[i] == creatorsGroup[j]) {
+                    checkValidInfo = 1;
+                    break;
+                }
+            }
+            require(
+                checkValidInfo == 1,
+                "You input invalid creators pair info, please check them carefully and input valid info!"
+            );
+        }
         _shareData[account].lastBlockNumber = block.number;
         uint256 leng = tokenIDs.length;
         for (uint256 i = 0; i < leng; i++) {
@@ -190,6 +241,7 @@ contract Buffer is Initializable, ReentrancyGuard {
             _transfer(account, _shareData[account].shareAmount);
             _shareData[account].shareAmount = 0;
         }
+        emit WithdrawnCheck(account, _shareData[account].shareAmount);
     }
 
     // adopted from https://github.com/lexDAO/Kali/blob/main/contracts/libraries/SafeTransferLib.sol
