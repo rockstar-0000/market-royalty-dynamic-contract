@@ -12,22 +12,32 @@ contract Buffer is Initializable, ReentrancyGuard {
         uint256 withdrawn;
     }
 
-    mapping(address => ShareData) public _shareData;
-    mapping(uint256 => address) private _creatorPairInfo;
-
     address public curator;
-    uint256 public totalShares = 0;
     uint256 private totalOwnersFee;
-    uint256 private totalShareOfPartners = 0;
+    uint256 private totalShareOfPartnersMint = 0;
+    uint256 private totalShareOfPartnersSale = 0;
     uint256 public royaltyFee = 10;
 
+    mapping(address => ShareData) public _shareData;
+    mapping(uint256 => address) private _creatorPairInfo;
+    mapping(uint256 => uint256) public totalShares;
     mapping(uint256 => address) private partnersGroup;
     uint256 private partnersGroupLength = 0;
     mapping(uint256 => address) private creatorsGroup;
     uint256 private creatorsGroupLength = 0;
-    mapping(uint256 => uint256) public share;
-    uint256 private shareLength = 0;
-    mapping(uint256 => uint256) public partnerShare;
+    // mapping(uint256 => uint256) public share;
+    // uint256 private shareLength = 0;
+    // mapping(uint256 => uint256) public partnerShare;
+
+    //////////
+    mapping(uint256 => mapping(uint256 => uint256)) public shareDetails;
+    uint256 private shareDetailLength = 0;
+    mapping(uint256 => mapping(uint256 => uint256)) public partnerShareDetails;
+    address private deadAddress = 0x0000000000000000000000000000000000000000;
+    //////////
+
+    uint256 mintStage = 50001;
+    uint256 saleStage = 50002;
 
     address public marketWallet; // wallet address for market fee
 
@@ -41,6 +51,7 @@ contract Buffer is Initializable, ReentrancyGuard {
     event UpdateCreatorsGroupCheck(bool updateGroup);
     event UpdateFeeCheck(uint256 feePercent);
     event WithdrawnCheck(address to, uint256 amount);
+    event UpdateSharesMintCheck(uint256[] shareMint, uint256[] partnerShareMint);
 
     function initialize(
         address _owner,
@@ -86,9 +97,13 @@ contract Buffer is Initializable, ReentrancyGuard {
                 _shares[i] > 0,
                 "Total share value must be greater than 0."
             );
-            totalShares += _shares[i];
-            share[i] = _shares[i];
-            shareLength++;
+            //////////
+            totalShares[saleStage] += _shares[i];
+            shareDetails[saleStage][i] = _shares[i];
+            shareDetailLength++;
+            //////////
+            // share[i] = _shares[i];
+            // shareLength++;
         }
         require(
             _partnersGroup.length == _partnerShare.length,
@@ -99,8 +114,11 @@ contract Buffer is Initializable, ReentrancyGuard {
                 _partnerShare[i] > 0,
                 "Partners' share value must be greater than 0."
             );
-            totalShareOfPartners += _partnerShare[i];
-            partnerShare[i] = _partnerShare[i];
+            totalShareOfPartnersSale += _partnerShare[i];
+            //////////
+            partnerShareDetails[saleStage][i] = _partnerShare[i];
+            //////////
+            // partnerShare[i] = _partnerShare[i];
         }
         marketWallet = _marketWallet;
         owner = _owner;
@@ -157,28 +175,36 @@ contract Buffer is Initializable, ReentrancyGuard {
         emit UpdateCreatorsGroupCheck(true);
     }
 
-    function shareReceived() external payable {
+    function shareReceived(uint256 stage) external payable {
         totalReceived += msg.value;
 
-        totalOwnersFee += (msg.value * share[5]) / totalShares;
+        // totalOwnersFee += (msg.value * share[5]) / totalSharesSale;
+        totalOwnersFee += (msg.value * shareDetails[stage][5]) / totalShares[stage];
         // Marketplace Calculation
+        // _shareData[marketWallet].shareAmount +=
+        //     (msg.value * share[6]) /
+        //     totalSharesSale;
         _shareData[marketWallet].shareAmount +=
-            (msg.value * share[6]) /
-            totalShares;
+            (msg.value * shareDetails[stage][6]) /
+            totalShares[stage];
         // Curator Calculation
-        _shareData[curator].shareAmount += (msg.value * share[0]) / totalShares;
+        // _shareData[curator].shareAmount += (msg.value * share[0]) / totalSharesSale;
+        _shareData[curator].shareAmount += (msg.value * shareDetails[stage][0]) / totalShares[stage];
         // partnersGroup Calculation
         for (uint256 i = 0; i < partnersGroupLength; i++) {
+            // _shareData[partnersGroup[i]].shareAmount +=
+            //     (((msg.value * share[1]) / totalSharesSale) * partnerShare[i]) /
+            //     totalShareOfPartnersSale;
             _shareData[partnersGroup[i]].shareAmount +=
-                (((msg.value * share[1]) / totalShares) * partnerShare[i]) /
-                totalShareOfPartners;
+                (((msg.value * shareDetails[stage][1]) / totalShares[stage]) * partnerShareDetails[stage][i]) /
+                totalShareOfPartnersSale;
         }
         // creatorsGroup Calculation
         for (uint256 i = 0; i < creatorsGroupLength; i++) {
             _shareData[creatorsGroup[i]].shareAmount +=
-                (msg.value * share[2]) /
+                (msg.value * shareDetails[stage][2]) /
                 creatorsGroupLength /
-                totalShares;
+                totalShares[stage];
         }
     }
 
@@ -194,6 +220,21 @@ contract Buffer is Initializable, ReentrancyGuard {
         );
         royaltyFee = _royaltyFee;
         emit UpdateFeeCheck(royaltyFee);
+    }
+
+    function updateRoyaltyPercentageMint(uint256[] calldata _shareMint, uint256[] calldata _partnerShareMint) external onlyOwner {
+        require(_shareMint.length == shareDetailLength, "Please input share info for mint stage correctly");
+        require(_partnerShareMint.length == partnersGroupLength, "Please input partners share info for mint stage correctly");
+
+        for (uint256 i =0; i < _shareMint.length; i++) {
+            shareDetails[mintStage][i] = _shareMint[i];
+        }
+
+        for (uint256 i = 0; i < _partnerShareMint.length; i++) {
+            partnerShareDetails[mintStage][i] = _partnerShareMint[i];
+        }
+
+        emit UpdateSharesMintCheck(_shareMint, _partnerShareMint);
     }
 
     // Withdraw
@@ -221,14 +262,26 @@ contract Buffer is Initializable, ReentrancyGuard {
         _shareData[account].lastBlockNumber = block.number;
         uint256 leng = tokenIDs.length;
         for (uint256 i = 0; i < leng; i++) {
-            _shareData[_creatorPairInfo[tokenIDs[i]]].shareAmount +=
-                (share[3] * prices[i] * royaltyFee) /
-                100 /
-                totalShares;
-            _shareData[sellerAddresses[i]].shareAmount +=
-                (share[4] * prices[i] * royaltyFee) /
-                100 /
-                totalShares;
+            if (sellerAddresses[i] != deadAddress) {
+                _shareData[_creatorPairInfo[tokenIDs[i]]].shareAmount +=
+                    (shareDetails[saleStage][3] * prices[i] * royaltyFee) /
+                    100 /
+                    totalShares[saleStage];
+                _shareData[sellerAddresses[i]].shareAmount +=
+                    (shareDetails[saleStage][4] * prices[i] * royaltyFee) /
+                    100 /
+                    totalShares[saleStage];
+            } else {
+                _shareData[_creatorPairInfo[tokenIDs[i]]].shareAmount +=
+                    (shareDetails[mintStage][3] * prices[i] * royaltyFee) /
+                    100 /
+                    totalShares[mintStage];
+                _shareData[sellerAddresses[i]].shareAmount +=
+                    (shareDetails[mintStage][4] * prices[i] * royaltyFee) /
+                    100 /
+                    totalShares[mintStage];
+            }
+            
         }
         // OwnersGroup Calculation
         uint256 ownerLength = owners.length;

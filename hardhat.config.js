@@ -88,8 +88,8 @@ module.exports = {
       timeout: 1000 * 60 * 60 * 24, // 1 day
       accounts: [process.env.TESTNET_PRIVATE_KEY],
     },
-    georli: {
-      url: process.env.GEORLI,
+    goerli: {
+      url: process.env.GOERLI,
       timeout: 1000 * 60 * 60 * 24, // 1 day
       accounts: [process.env.TESTNET_PRIVATE_KEY],
     },
