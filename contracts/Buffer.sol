@@ -14,20 +14,16 @@ contract Buffer is Initializable, ReentrancyGuard {
 
     address public curator;
     uint256 private totalOwnersFee;
-    uint256 private totalShareOfPartnersMint = 0;
-    uint256 private totalShareOfPartnersSale = 0;
     uint256 public royaltyFee = 10;
 
     mapping(address => ShareData) public _shareData;
     mapping(uint256 => address) private _creatorPairInfo;
     mapping(uint256 => uint256) public totalShares;
+    mapping(uint256 => uint256) public totalSharesOfPartners;
     mapping(uint256 => address) private partnersGroup;
     uint256 private partnersGroupLength = 0;
     mapping(uint256 => address) private creatorsGroup;
     uint256 private creatorsGroupLength = 0;
-    // mapping(uint256 => uint256) public share;
-    // uint256 private shareLength = 0;
-    // mapping(uint256 => uint256) public partnerShare;
 
     //////////
     mapping(uint256 => mapping(uint256 => uint256)) public shareDetails;
@@ -51,7 +47,7 @@ contract Buffer is Initializable, ReentrancyGuard {
     event UpdateCreatorsGroupCheck(bool updateGroup);
     event UpdateFeeCheck(uint256 feePercent);
     event WithdrawnCheck(address to, uint256 amount);
-    event UpdateSharesMintCheck(uint256[] shareMint, uint256[] partnerShareMint);
+    event UpdateSharesCheck(uint256 stage, uint256[] share, uint256[] partnerShare);
 
     function initialize(
         address _owner,
@@ -63,10 +59,7 @@ contract Buffer is Initializable, ReentrancyGuard {
         address _marketWallet
     ) public payable initializer {
         curator = _curator;
-        require(
-            _partnersGroup.length > 0,
-            "Please input partners group information correctly."
-        );
+
         for (uint256 i = 0; i < _partnersGroup.length; i++) {
             for (uint256 j = 0; j < i; j++) {
                 require(
@@ -77,10 +70,6 @@ contract Buffer is Initializable, ReentrancyGuard {
             partnersGroup[i] = _partnersGroup[i];
             partnersGroupLength++;
         }
-        require(
-            _creatorsGroup.length > 0,
-            "Please input creators group information correctly."
-        );
         for (uint256 i = 0; i < _creatorsGroup.length; i++) {
             for (uint256 j = 0; j < i; j++) {
                 require(
@@ -93,32 +82,22 @@ contract Buffer is Initializable, ReentrancyGuard {
         }
         require(_shares.length == 7, "Please input shares info correctly.");
         for (uint256 i = 0; i < _shares.length; i++) {
-            require(
-                _shares[i] > 0,
-                "Total share value must be greater than 0."
-            );
             //////////
             totalShares[saleStage] += _shares[i];
             shareDetails[saleStage][i] = _shares[i];
             shareDetailLength++;
             //////////
-            // share[i] = _shares[i];
-            // shareLength++;
         }
+        require(totalShares[saleStage] > 0, "Sum of share percentages must be greater than 0.");
         require(
             _partnersGroup.length == _partnerShare.length,
             "Please input partner group shares information correctly."
         );
         for (uint256 i = 0; i < _partnerShare.length; i++) {
-            require(
-                _partnerShare[i] > 0,
-                "Partners' share value must be greater than 0."
-            );
-            totalShareOfPartnersSale += _partnerShare[i];
+            totalSharesOfPartners[saleStage] += _partnerShare[i];
             //////////
             partnerShareDetails[saleStage][i] = _partnerShare[i];
             //////////
-            // partnerShare[i] = _partnerShare[i];
         }
         marketWallet = _marketWallet;
         owner = _owner;
@@ -178,26 +157,18 @@ contract Buffer is Initializable, ReentrancyGuard {
     function shareReceived(uint256 stage) external payable {
         totalReceived += msg.value;
 
-        // totalOwnersFee += (msg.value * share[5]) / totalSharesSale;
         totalOwnersFee += (msg.value * shareDetails[stage][5]) / totalShares[stage];
         // Marketplace Calculation
-        // _shareData[marketWallet].shareAmount +=
-        //     (msg.value * share[6]) /
-        //     totalSharesSale;
         _shareData[marketWallet].shareAmount +=
             (msg.value * shareDetails[stage][6]) /
             totalShares[stage];
         // Curator Calculation
-        // _shareData[curator].shareAmount += (msg.value * share[0]) / totalSharesSale;
         _shareData[curator].shareAmount += (msg.value * shareDetails[stage][0]) / totalShares[stage];
         // partnersGroup Calculation
         for (uint256 i = 0; i < partnersGroupLength; i++) {
-            // _shareData[partnersGroup[i]].shareAmount +=
-            //     (((msg.value * share[1]) / totalSharesSale) * partnerShare[i]) /
-            //     totalShareOfPartnersSale;
             _shareData[partnersGroup[i]].shareAmount +=
                 (((msg.value * shareDetails[stage][1]) / totalShares[stage]) * partnerShareDetails[stage][i]) /
-                totalShareOfPartnersSale;
+                totalSharesOfPartners[stage];
         }
         // creatorsGroup Calculation
         for (uint256 i = 0; i < creatorsGroupLength; i++) {
@@ -222,19 +193,29 @@ contract Buffer is Initializable, ReentrancyGuard {
         emit UpdateFeeCheck(royaltyFee);
     }
 
-    function updateRoyaltyPercentageMint(uint256[] calldata _shareMint, uint256[] calldata _partnerShareMint) external onlyOwner {
-        require(_shareMint.length == shareDetailLength, "Please input share info for mint stage correctly");
-        require(_partnerShareMint.length == partnersGroupLength, "Please input partners share info for mint stage correctly");
+    function updateRoyaltyPercentage(uint256 _stage, uint256[] calldata _share, uint256[] calldata _partnerShare) external onlyOwner {
+        require(_share.length == shareDetailLength, "Please input share info correctly");
+        require(_partnerShare.length == partnersGroupLength, "Please input partners share info correctly");
+        require(_stage == mintStage || _stage == saleStage, "Please input correct number for stage.");
 
-        for (uint256 i =0; i < _shareMint.length; i++) {
-            shareDetails[mintStage][i] = _shareMint[i];
+        uint256 totalTmp = 0;
+        uint256 partnersTmp = 0;
+
+        for (uint256 i =0; i < _share.length; i++) {
+            shareDetails[_stage][i] = _share[i];
+            totalTmp += _share[i];
         }
 
-        for (uint256 i = 0; i < _partnerShareMint.length; i++) {
-            partnerShareDetails[mintStage][i] = _partnerShareMint[i];
+        for (uint256 i = 0; i < _partnerShare.length; i++) {
+            partnerShareDetails[_stage][i] = _partnerShare[i];
+            partnersTmp += _partnerShare[i];
         }
 
-        emit UpdateSharesMintCheck(_shareMint, _partnerShareMint);
+        require(totalTmp > 0, "Please input valid share info. Sum of them must be greater than 0.");
+        totalShares[_stage] = totalTmp;
+        totalSharesOfPartners[_stage] = partnersTmp;
+
+        emit UpdateSharesCheck(_stage, _share, _partnerShare);
     }
 
     // Withdraw
@@ -281,7 +262,6 @@ contract Buffer is Initializable, ReentrancyGuard {
                     100 /
                     totalShares[mintStage];
             }
-            
         }
         // OwnersGroup Calculation
         uint256 ownerLength = owners.length;

@@ -83,11 +83,6 @@ module.exports = {
       blockGasLimit: 0x1fffffffffffff,
       allowUnlimitedContractSize: true,
     },
-    rinkeby: {
-      url: process.env.RINKEBY,
-      timeout: 1000 * 60 * 60 * 24, // 1 day
-      accounts: [process.env.TESTNET_PRIVATE_KEY],
-    },
     goerli: {
       url: process.env.GOERLI,
       timeout: 1000 * 60 * 60 * 24, // 1 day
