@@ -1,4 +1,5 @@
 node_modules
+abi
 .env
 .DS_Store
 logs

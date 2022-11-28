@@ -154,28 +154,28 @@ contract Buffer is Initializable, ReentrancyGuard {
         emit UpdateCreatorsGroupCheck(true);
     }
 
-    function shareReceived(uint256 stage) external payable {
+    function shareReceived() external payable {
         totalReceived += msg.value;
 
-        totalOwnersFee += (msg.value * shareDetails[stage][5]) / totalShares[stage];
+        totalOwnersFee += (msg.value * shareDetails[saleStage][5]) / totalShares[saleStage];
         // Marketplace Calculation
         _shareData[marketWallet].shareAmount +=
-            (msg.value * shareDetails[stage][6]) /
-            totalShares[stage];
+            (msg.value * shareDetails[saleStage][6]) /
+            totalShares[saleStage];
         // Curator Calculation
-        _shareData[curator].shareAmount += (msg.value * shareDetails[stage][0]) / totalShares[stage];
+        _shareData[curator].shareAmount += (msg.value * shareDetails[saleStage][0]) / totalShares[saleStage];
         // partnersGroup Calculation
         for (uint256 i = 0; i < partnersGroupLength; i++) {
             _shareData[partnersGroup[i]].shareAmount +=
-                (((msg.value * shareDetails[stage][1]) / totalShares[stage]) * partnerShareDetails[stage][i]) /
-                totalSharesOfPartners[stage];
+                (((msg.value * shareDetails[saleStage][1]) / totalShares[saleStage]) * partnerShareDetails[saleStage][i]) /
+                totalSharesOfPartners[saleStage];
         }
         // creatorsGroup Calculation
         for (uint256 i = 0; i < creatorsGroupLength; i++) {
             _shareData[creatorsGroup[i]].shareAmount +=
-                (msg.value * shareDetails[stage][2]) /
+                (msg.value * shareDetails[saleStage][2]) /
                 creatorsGroupLength /
-                totalShares[stage];
+                totalShares[saleStage];
         }
     }
 
