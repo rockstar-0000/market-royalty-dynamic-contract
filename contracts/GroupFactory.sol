@@ -5,12 +5,12 @@ import "@openzeppelin/contracts-upgradeable/proxy/ClonesUpgradeable.sol";
 import "./Buffer.sol";
 
 contract Factory {
+    address public immutable implementation;
     event ContractDeployed(
         address indexed owner,
         address indexed group,
         string title
     );
-    address public immutable implementation;
 
     constructor() {
         implementation = address(new Buffer());
